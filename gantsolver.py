@@ -65,7 +65,7 @@ def parse_instance_data(txt_data):
 
     for i in range(n):
         if block_idx >= len(txt_data):
-            print(f"Error: Missing processing time data for task {i + 1}")
+            print(f"错误：缺少作业{i + 1}的处理时间数据")
             return None
 
         block = txt_data[block_idx]
@@ -86,8 +86,9 @@ def parse_instance_data(txt_data):
             break
         block_idx += 1
 
-    print(f"Assembly set quantity H={H}")
+    print(f"装配集数量 H={H}")
 
+    # 装配时间数据
     p_A = [0] * (H + 1)
     for h in range(1, H + 1):
         if block_idx >= len(txt_data):
@@ -105,6 +106,7 @@ def parse_instance_data(txt_data):
         p_A[h] = ass_time
         block_idx += 1
 
+    # 作业归属信息
     prod_jobs = [[] for _ in range(H + 1)]
     for i in range(1, n + 1):
         if block_idx >= len(txt_data):
@@ -192,8 +194,10 @@ def plot_gantt(result, instance_data, output_dir="results", filename="gantt.png"
     for f, jobs_in_factory in enumerate(factories_jobs):
         for machine_i in range(m):
             for job in jobs_in_factory:
-                start = result['all_variables'].get(f'Sij[{machine_i},{job}]', 0)
                 end = result['all_variables'].get(f'Cij[{machine_i},{job}]', 0)
+                pd_val = result['all_variables'].get(f'pd[{machine_i},{job}]', 0)
+                start = end - pd_val
+
                 if end - start > 0:
                     color = job_colors.get(job, 'gray')
                     rect = patches.Rectangle(
@@ -313,7 +317,7 @@ def solve_eedapfsp(instance_data, output_dir="results"):
     )
     idle_energy = model.addVar(vtype=GRB.CONTINUOUS, name="idle_energy")
     shutdown_energy = model.addVar(vtype=GRB.CONTINUOUS, name="shutdown_energy")
-    Sij = model.addVars(m, n + 1, vtype=GRB.CONTINUOUS, name="Sij")  # 开始时间
+    #Sij = model.addVars(m, n + 1, vtype=GRB.CONTINUOUS, name="Sij")  # 开始时间
 
     model.addConstrs((gp.quicksum(X[k, j] for k in range(n + 1) if k != j) == 1 for j in range(1, n + 1)), "constr1")
     model.addConstrs((gp.quicksum(X[k, j] for j in range(n + 1) if k != j) <= 1 for k in range(1, n + 1)), "constr2")
@@ -325,12 +329,6 @@ def solve_eedapfsp(instance_data, output_dir="results"):
     model.addConstrs((pd[i, j] == gp.quicksum(pt[i][j - 1] * (base_speed / speeds[d]) * z[i, j, d] for d in range(D))
                       for i in range(m) for j in range(1, n + 1)))
     model.addConstrs((pd[i, 0] == 0 for i in range(m)), "virtual_job_pd")
-
-    model.addConstrs(
-        (Sij[i, j] == Cij[i, j] - pd[i, j]
-         for i in range(m) for j in range(n + 1)),
-        name="start_time_def"
-    )
 
     for i in range(m):
         if i == 0:
@@ -391,7 +389,7 @@ def solve_eedapfsp(instance_data, output_dir="results"):
                 if j != k and j != 0:
                     model.addGenConstrIndicator(
                         X[j, k], True,
-                        idle_time[i, j, k] == Sij[i, k] - Cij[i, j],
+                        idle_time[i, j, k] == Cij[i, k] - pd[i, k] - Cij[i, j],
                         name=f"idle_time_exact_m{i}_j{j}_k{k}"
                     )
                     model.addGenConstrIndicator(
@@ -527,6 +525,6 @@ def run_single_instance(file_path):
 # 使用示例
 if __name__ == "__main__":
     # Specify the path of the instance file to be processed
-    instance_file = ".../I_8_5 _2_2_1.txt"
+    instance_file = "D:/project/研究生/Gurobi/I_8_5 _2_2_1.txt"
 
     run_single_instance(instance_file)
